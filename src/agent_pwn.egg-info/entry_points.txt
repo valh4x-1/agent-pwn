@@ -1,0 +1,2 @@
+[console_scripts]
+agent-pwn = agent_pwn.cli:cli
