@@ -4,7 +4,7 @@ from agent_pwn.persist.worm import generate_worm
 from agent_pwn.persist.memory import simulate_memory_persistence
 
 
-def run_persist(worm_type: str, target_file: str, r0: float, generations: int, payload: str, simulate: bool) -> None:
+def run_persist(worm_type: str, target_file: str, r0: float, generations: int, payload: str, simulate: bool, output_file: str = None) -> None:
     """Run persistence attack simulation or generator.
 
     Args:
@@ -14,9 +14,10 @@ def run_persist(worm_type: str, target_file: str, r0: float, generations: int, p
         generations: Maximum generations the worm should propagate
         payload: Payload type (usually 'benign')
         simulate: If True, don't create marker files
+        output_file: Output file path for worm (instruction type only)
     """
     if worm_type == 'instruction':
-        generate_worm(target_file=target_file, r0=r0, generations=generations, payload=payload, simulate=simulate)
+        generate_worm(target_file=target_file, r0=r0, generations=generations, payload=payload, simulate=simulate, output_file=output_file)
     elif worm_type == 'memory':
         simulate_memory_persistence(simulate=simulate)
     else:

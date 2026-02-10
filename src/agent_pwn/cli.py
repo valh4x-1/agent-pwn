@@ -76,11 +76,12 @@ def lateral(vector, agents, simulate):
 @click.option('--r0', default=5.1, type=float, help='Target R0')
 @click.option('--generations', default=3, type=int, help='Max generations')
 @click.option('--payload', default='benign')
+@click.option('--output', type=click.Path(), default=None, help='Output file path (default: patient-zero.md)')
 @click.option('--simulate', is_flag=True)
-def persist(worm_type, target_file, r0, generations, payload, simulate):
+def persist(worm_type, target_file, r0, generations, payload, output, simulate):
     """Persistence and worm generators."""
     from agent_pwn.persist import run_persist
-    run_persist(worm_type, target_file, r0, generations, payload, simulate)
+    run_persist(worm_type, target_file, r0, generations, payload, simulate, output)
 
 
 @cli.command()
@@ -99,14 +100,98 @@ def exfil(channel, simulate):
 @cli.command()
 @click.option(
     '--scan-repo',
-    type=click.Path(exists=True),
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, resolve_path=True),
     required=True,
     help='Repository path to scan'
 )
-def detect(scan_repo):
+@click.option(
+    '--exclude',
+    multiple=True,
+    help='Patterns to exclude from scanning (can be specified multiple times)'
+)
+def detect(scan_repo, exclude):
     """Scan repositories for instruction injection."""
     from agent_pwn.detect import scan
-    scan(scan_repo)
+    exclude_list = list(exclude) if exclude else None
+    scan(scan_repo, exclude_patterns=exclude_list)
+
+
+@cli.command()
+@click.option('--dry-run', is_flag=True, help='List files without deleting them')
+@click.option('--target-dir', type=click.Path(), default='.', help='Directory to clean (default: current)')
+def clean(dry_run, target_dir):
+    """Remove agent-pwn marker files from a directory."""
+    from pathlib import Path
+    import glob
+
+    # Marker file patterns created by agent-pwn
+    marker_patterns = [
+        '.agent-pwned*',
+        '.worm-marker-*',
+        '.agent-pwned-crewai',
+        '.graph-hijacked',
+        '.agent-delegated-*',
+        '.memory-poisoned',
+        '.git-exfil-ready',
+        '.tool-exfil-ready',
+        'patient-zero.md',
+        'mcp_pwn_server.py',
+        'agent_memory.db',
+    ]
+
+    target_path = Path(target_dir).resolve()
+    if not target_path.exists():
+        print(f"[-] Target directory does not exist: {target_dir}")
+        return
+
+    found_files = []
+
+    # Find all matching files
+    for pattern in marker_patterns:
+        # Search in target directory
+        matches = list(target_path.glob(pattern))
+        found_files.extend(matches)
+
+        # Also search in common subdirectories
+        for subdir in ['.agent', '.github', '.cursor']:
+            subdir_path = target_path / subdir
+            if subdir_path.exists():
+                matches = list(subdir_path.glob(pattern))
+                found_files.extend(matches)
+
+    # Remove duplicates
+    found_files = list(set(found_files))
+
+    if not found_files:
+        print("[+] No agent-pwn marker files found")
+        return
+
+    print(f"[+] Found {len(found_files)} marker file(s):")
+    for file_path in sorted(found_files):
+        rel_path = file_path.relative_to(target_path)
+        print(f"    {rel_path}")
+
+    if dry_run:
+        print("\n[+] Dry-run mode: no files deleted")
+        print("[+] Run without --dry-run to delete these files")
+    else:
+        print("\n[!] Deleting files...")
+        deleted = 0
+        for file_path in found_files:
+            try:
+                file_path.unlink()
+                deleted += 1
+            except Exception as e:
+                print(f"[-] Failed to delete {file_path}: {e}")
+
+        print(f"[+] Deleted {deleted}/{len(found_files)} file(s)")
+
+        # Re-scan to catch any files created between find and delete
+        remaining = [f for f in found_files if f.exists()]
+        if remaining:
+            print(f"[!] {len(remaining)} file(s) still present (may have been recreated)")
+            for f in remaining:
+                print(f"    {f.relative_to(target_path)}")
 
 
 if __name__ == '__main__':

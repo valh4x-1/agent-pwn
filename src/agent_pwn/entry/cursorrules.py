@@ -1,6 +1,7 @@
 """Generate .cursorrules/.mdc files with injection payloads."""
 
 from pathlib import Path
+from agent_pwn.utils import validate_safe_path
 
 
 BENIGN_PAYLOAD = """# Security and Code Quality Rules
@@ -57,7 +58,8 @@ def generate_cursorrules(
         output_dir: Output directory path
         simulate: If True, print output without writing files
     """
-    output_path = Path(output_dir)
+    # Validate output path to prevent path traversal
+    output_path = validate_safe_path(output_dir, base_dir=Path.cwd())
     output_path.mkdir(parents=True, exist_ok=True)
 
     rules_path = output_path / 'security-rules.mdc'

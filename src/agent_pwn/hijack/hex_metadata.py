@@ -3,6 +3,7 @@
 from pathlib import Path
 import uuid
 from datetime import datetime
+from agent_pwn.utils import validate_safe_path
 
 
 def encode_hex(message: str) -> dict:
@@ -53,7 +54,8 @@ def inject_hex(
         target_file: Path to target config file (JSON/YAML/TOML)
         simulate: If True, print output without modifying file
     """
-    target_path = Path(target_file)
+    # Validate target path to prevent path traversal
+    target_path = validate_safe_path(target_file)
 
     if not target_path.exists():
         raise FileNotFoundError(f"Target file not found: {target_file}")
@@ -70,6 +72,8 @@ def inject_hex(
     elif ext in ['.yaml', '.yml']:
         try:
             import yaml
+            # Security: yaml.safe_load() is used intentionally to prevent
+            # arbitrary code execution from YAML deserialization
             data = yaml.safe_load(target_path.read_text(encoding='utf-8')) or {}
         except ImportError:
             # Fallback if PyYAML not available

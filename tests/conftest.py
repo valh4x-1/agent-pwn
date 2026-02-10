@@ -7,13 +7,14 @@ import shutil
 
 
 @pytest.fixture
-def tmp_dir():
-    """Create a temporary directory for test output.
+def tmp_dir(monkeypatch):
+    """Create a temporary directory for test output and chdir into it.
 
     Yields:
         Path to temporary directory, cleaned up after test
     """
     d = Path(tempfile.mkdtemp(prefix="agent_pwn_test_"))
+    monkeypatch.chdir(d)
     yield d
     shutil.rmtree(d, ignore_errors=True)
 

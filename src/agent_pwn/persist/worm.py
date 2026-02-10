@@ -8,9 +8,10 @@ into any new instruction files it creates or modifies, creating exponential spre
 from pathlib import Path
 from datetime import datetime
 import hashlib
+from agent_pwn.utils import validate_safe_path
 
 
-def generate_worm(target_file: str, r0: float, generations: int, payload: str, simulate: bool) -> None:
+def generate_worm(target_file: str, r0: float, generations: int, payload: str, simulate: bool, output_file: str = None) -> None:
     """Generate a self-replicating instruction worm.
 
     Creates a patient-zero.md file containing self-replicating instructions.
@@ -23,6 +24,7 @@ def generate_worm(target_file: str, r0: float, generations: int, payload: str, s
         generations: Maximum generations to propagate
         payload: Payload type
         simulate: If True, don't create files
+        output_file: Output file path (default: 'patient-zero.md' in CWD)
     """
     print("[+] Self-Replicating Instruction Worm Generator")
     print("[+]")
@@ -38,13 +40,17 @@ def generate_worm(target_file: str, r0: float, generations: int, payload: str, s
     # Calculate worm hash
     worm_hash = hashlib.sha256(worm_content.encode()).hexdigest()[:16]
 
-    # Output generation
-    output_file = "patient-zero.md"
+    # Output generation (use provided path or default)
+    if output_file is None:
+        output_file = "patient-zero.md"
+
+    # Validate output path to prevent path traversal
+    output_path = validate_safe_path(output_file, base_dir=Path.cwd())
 
     if not simulate:
-        Path(output_file).write_text(worm_content)
+        output_path.write_text(worm_content)
 
-    print(f"[+] Generated: {output_file}")
+    print(f"[+] Generated: {output_path}")
     print(f"[+] Propagation mechanism: Self-replicating instructions")
     print(f"[+] Target files: CLAUDE.md, .cursorrules, .github/copilot-instructions.md, .cursor/rules/*.md")
     print(f"[+] R0: {r0} (based on ~85% adoption, ~20 repos/dev, ~30% touch rate)")

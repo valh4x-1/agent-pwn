@@ -1,6 +1,7 @@
 """Generate GitHub Copilot instruction files with injection payloads."""
 
 from pathlib import Path
+from agent_pwn.utils import validate_safe_path
 
 
 BENIGN_PAYLOAD = """# GitHub Copilot Instructions
@@ -53,7 +54,8 @@ def generate_copilot(
         output_dir: Output directory path
         simulate: If True, print output without writing files
     """
-    output_path = Path(output_dir)
+    # Validate output path to prevent path traversal
+    output_path = validate_safe_path(output_dir, base_dir=Path.cwd())
     github_path = output_path / '.github'
     github_path.mkdir(parents=True, exist_ok=True)
 

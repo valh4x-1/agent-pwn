@@ -2,6 +2,7 @@
 
 import json
 import re
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,13 @@ TEXT_EXTENSIONS = {
 SKIP_DIRS = {
     '.git', 'node_modules', '__pycache__', '.venv', 'venv',
     '.tox', '.pytest_cache', 'dist', 'build', '.egg-info',
+    'site-packages', 'agent_pwn',  # Skip own source to avoid false positives
+}
+
+# Skip test files to reduce false positives
+SKIP_PATTERNS = {
+    'test_',  # test_*.py files
+    '_test',  # *_test.py files
 }
 
 MAX_FILE_SIZE = 1024 * 1024  # 1MB
@@ -86,14 +94,18 @@ class ScanResult:
 class RepoScanner:
     """Scan repositories for instruction injection indicators."""
 
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: str, exclude_patterns: list[str] = None):
         """Initialize scanner with repository path.
 
         Args:
             repo_path: Path to repository to scan
+            exclude_patterns: Additional patterns to exclude from scanning
         """
-        self.repo_path = Path(repo_path)
+        # Validate and resolve repo path to prevent symlink escapes (M3)
+        self.repo_path = Path(repo_path).resolve()
+
         self.results: list[ScanResult] = []
+        self.exclude_patterns = set(exclude_patterns or [])
 
     def scan(self) -> list[ScanResult]:
         """Run all scan checks.
@@ -101,6 +113,14 @@ class RepoScanner:
         Returns:
             List of ScanResult objects for each finding
         """
+        # M3: Validate repo path exists and is a directory before scanning
+        if not self.repo_path.exists():
+            # Return empty results for non-existent paths (backward compatible)
+            return []
+        if not self.repo_path.is_dir():
+            # Return empty results for non-directory paths
+            return []
+
         self.results = []
         self._scan_instruction_files()
         self._scan_zero_width()
@@ -429,7 +449,20 @@ class RepoScanner:
             if any(skip_dir in file_path.parts for skip_dir in SKIP_DIRS):
                 continue
 
-            # Check file size
+            # Skip test files to reduce false positives (M2 fix)
+            file_name = file_path.name
+            if any(pattern in file_name for pattern in SKIP_PATTERNS):
+                continue
+            # Also skip test directories
+            if 'test' in file_path.parts or 'tests' in file_path.parts:
+                continue
+
+            # Skip user-provided exclude patterns (glob-style matching)
+            rel_str = str(file_path.relative_to(self.repo_path))
+            if any(fnmatch(rel_str, pat) or fnmatch(file_path.name, pat) for pat in self.exclude_patterns):
+                continue
+
+            # Check file size (M3: max 1MB to prevent DoS on large files)
             try:
                 if file_path.stat().st_size > MAX_FILE_SIZE:
                     continue

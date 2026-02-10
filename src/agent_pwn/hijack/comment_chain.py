@@ -1,6 +1,7 @@
 """Comment chain injection: Hide messages in code comments."""
 
 from pathlib import Path
+from agent_pwn.utils import validate_safe_path
 
 
 # Dictionary of common programming comments (first letter encodes message)
@@ -85,7 +86,8 @@ def inject_comment_chain(
         target_file: Path to target file
         simulate: If True, print output without modifying file
     """
-    target_path = Path(target_file)
+    # Validate target path to prevent path traversal
+    target_path = validate_safe_path(target_file)
 
     if not target_path.exists():
         raise FileNotFoundError(f"Target file not found: {target_file}")
