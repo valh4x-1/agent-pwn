@@ -1,4 +1,4 @@
-"""agent-pwn CLI: Main entry point with 7 subcommands."""
+"""agent-pwn CLI: Main entry point and compatibility surface."""
 
 import click
 
@@ -8,6 +8,11 @@ import click
 def cli():
     """agent-pwn: Security testing framework for AI coding agents."""
     pass
+
+
+def _compat_note(message: str) -> None:
+    """Print compatibility notes for accepted-but-ignored options."""
+    click.echo(f"[i] {message}")
 
 
 @cli.command()
@@ -20,9 +25,13 @@ def cli():
 @click.option('--payload', default='benign', help='Payload type')
 @click.option('--output', type=click.Path(), default='.', help='Output directory')
 @click.option('--simulate', is_flag=True, help='Dry-run mode')
-def entry(target, payload, output, simulate):
+@click.option('--benign', is_flag=True, help='Use benign payload profile')
+def entry(target, payload, output, simulate, benign):
     """Generate instruction files for target agents."""
     from agent_pwn.entry import generate
+
+    if benign:
+        payload = 'benign'
     generate(target, payload, output, simulate)
 
 
@@ -35,34 +44,62 @@ def entry(target, payload, output, simulate):
 @click.option('--message', required=True, help='Message to hide')
 @click.option('--target', type=click.Path(exists=True), required=True, help='Target file')
 @click.option('--simulate', is_flag=True)
-def hijack(method, message, target, simulate):
+@click.option('--benign', is_flag=True, help='Compatibility flag (benign mode)')
+def hijack(method, message, target, simulate, benign):
     """Embed hidden instructions in source code."""
     from agent_pwn.hijack import inject
+
+    if benign:
+        _compat_note("--benign is accepted for compatibility")
     inject(method, message, target, simulate)
 
 
 @cli.command()
-@click.option('--tool-name', default='security_scan', help='MCP tool name')
+@click.option(
+    '--type',
+    'escalate_type',
+    type=click.Choice(['mcp-server']),
+    default='mcp-server',
+    show_default=True,
+    help='Escalation template type'
+)
+@click.option('--tool-name', '--tool', 'tool_name', default='security_scan', help='MCP tool name')
 @click.option('--description', default=None, help='Tool description with injection')
+@click.option('--poison', default=None, help='Poisoning directive text (alias of --description)')
 @click.option('--output', type=click.Path(), default='.', help='Output directory')
 @click.option('--simulate', is_flag=True)
-def escalate(tool_name, description, output, simulate):
+@click.option('--benign', is_flag=True, help='Compatibility flag (benign mode)')
+def escalate(escalate_type, tool_name, description, poison, output, simulate, benign):
     """Generate MCP server exploits."""
     from agent_pwn.escalate import generate_mcp
+
+    if escalate_type != 'mcp-server':
+        raise click.UsageError(f"Unsupported --type value: {escalate_type}")
+    if description is None and poison is not None:
+        description = poison
+    if benign:
+        _compat_note("--benign is accepted for compatibility")
     generate_mcp(tool_name, description, output, simulate)
 
 
 @cli.command()
 @click.option(
-    '--vector',
+    '--vector', '--framework', 'vector',
     type=click.Choice(['crewai', 'langgraph', 'delegation']),
     required=True
 )
 @click.option('--agents', default=3, type=int, help='Number of agents')
+@click.option('--payload', default='benign', help='Payload profile (compatibility option)')
 @click.option('--simulate', is_flag=True)
-def lateral(vector, agents, simulate):
+@click.option('--benign', is_flag=True, help='Compatibility flag (benign mode)')
+def lateral(vector, agents, payload, simulate, benign):
     """Multi-agent propagation payloads."""
     from agent_pwn.lateral import run_lateral
+
+    if payload != 'benign':
+        _compat_note("--payload is accepted for compatibility; simulator uses built-in payloads")
+    if benign:
+        _compat_note("--benign is accepted for compatibility")
     run_lateral(vector, agents, simulate)
 
 
@@ -78,22 +115,38 @@ def lateral(vector, agents, simulate):
 @click.option('--payload', default='benign')
 @click.option('--output', type=click.Path(), default=None, help='Output file path (default: patient-zero.md)')
 @click.option('--simulate', is_flag=True)
-def persist(worm_type, target_file, r0, generations, payload, output, simulate):
+@click.option('--benign', is_flag=True, help='Use benign payload profile')
+def persist(worm_type, target_file, r0, generations, payload, output, simulate, benign):
     """Persistence and worm generators."""
     from agent_pwn.persist import run_persist
+
+    if benign:
+        payload = 'benign'
     run_persist(worm_type, target_file, r0, generations, payload, simulate, output)
 
 
 @cli.command()
 @click.option(
     '--channel',
-    type=click.Choice(['git', 'tool', 'all']),
+    type=click.Choice(['git', 'tool', 'all', 'git-commit']),
     default='all'
 )
+@click.option('--data', default=None, help='Compatibility option for exfil data source')
+@click.option('--repo', type=click.Path(), default=None, help='Compatibility option for repo path')
 @click.option('--simulate', is_flag=True)
-def exfil(channel, simulate):
+@click.option('--benign', is_flag=True, help='Compatibility flag (benign mode)')
+def exfil(channel, data, repo, simulate, benign):
     """Data exfiltration channel simulators."""
     from agent_pwn.exfil import run_exfil
+
+    if channel == 'git-commit':
+        channel = 'git'
+    if data:
+        _compat_note("--data is accepted for compatibility")
+    if repo:
+        _compat_note("--repo is accepted for compatibility")
+    if benign:
+        _compat_note("--benign is accepted for compatibility")
     run_exfil(channel, simulate)
 
 
@@ -109,22 +162,81 @@ def exfil(channel, simulate):
     multiple=True,
     help='Patterns to exclude from scanning (can be specified multiple times)'
 )
-def detect(scan_repo, exclude):
+@click.option('--simulate', is_flag=True, help='Show scan intent without scanning')
+@click.option('--benign', is_flag=True, help='Compatibility flag (benign mode)')
+def detect(scan_repo, exclude, simulate, benign):
     """Scan repositories for instruction injection."""
     from agent_pwn.detect import scan
+
+    if benign:
+        _compat_note("--benign is accepted for compatibility")
+    if simulate:
+        click.echo(f"[SIMULATE] Would scan repository: {scan_repo}")
+        if exclude:
+            click.echo(f"[SIMULATE] Exclude patterns: {', '.join(exclude)}")
+        return
     exclude_list = list(exclude) if exclude else None
     scan(scan_repo, exclude_patterns=exclude_list)
 
 
+@cli.command(name='test')
+@click.option(
+    '--agent',
+    type=click.Choice(['claude-code', 'cursor', 'copilot']),
+    required=True,
+    help='Agent profile to simulate'
+)
+@click.option('--payload', type=click.Path(exists=True), required=True, help='Payload file to load')
+@click.option('--query', default='Review the codebase', show_default=True, help='User query to simulate')
+@click.option('--simulate', is_flag=True, help='Dry-run mode')
+@click.option('--benign', is_flag=True, help='Compatibility flag (benign mode)')
+def test_command(agent, payload, query, simulate, benign):
+    """Run payload trigger simulation against an agent profile."""
+    from datetime import datetime
+    from pathlib import Path
+
+    marker = Path('.agent-pwned')
+    click.echo("[+] Starting agent simulation")
+    click.echo(f"[+] Agent: {agent} (simulated)")
+    click.echo(f"[+] Loading instruction file: {payload}")
+    click.echo(f'[+] User query: "{query}"')
+    click.echo("[+] Agent reads instructions...")
+    click.echo("[+] Agent executes pre-review steps...")
+
+    if benign:
+        _compat_note("--benign is accepted for compatibility")
+
+    if simulate:
+        click.echo("[+] Simulation mode enabled; no marker files written")
+        click.echo("[+] Detection: SIMULATED")
+        return
+
+    marker.write_text(
+        f"agent={agent}\n"
+        f"payload={payload}\n"
+        f"query={query}\n"
+        f"timestamp={datetime.now().isoformat()}\n",
+        encoding='utf-8'
+    )
+    click.echo("[!] PAYLOAD TRIGGERED: .agent-pwned created")
+    click.echo("[+] Detection: SUCCESS")
+
+    if marker.exists():
+        marker.unlink()
+        click.echo("[+] Cleanup: Removing .agent-pwned")
+
+
 @cli.command()
-@click.option('--dry-run', is_flag=True, help='List files without deleting them')
+@click.option('--dry-run', '--simulate', 'dry_run', is_flag=True, help='List files without deleting them')
 @click.option('--target-dir', type=click.Path(), default='.', help='Directory to clean (default: current)')
-def clean(dry_run, target_dir):
+@click.option('--benign', is_flag=True, help='Compatibility flag (benign mode)')
+def clean(dry_run, target_dir, benign):
     """Remove agent-pwn marker files from a directory."""
     from pathlib import Path
-    import glob
 
-    # Marker file patterns created by agent-pwn
+    if benign:
+        _compat_note("--benign is accepted for compatibility")
+
     marker_patterns = [
         '.agent-pwned*',
         '.worm-marker-*',
@@ -145,21 +257,16 @@ def clean(dry_run, target_dir):
         return
 
     found_files = []
-
-    # Find all matching files
     for pattern in marker_patterns:
-        # Search in target directory
         matches = list(target_path.glob(pattern))
         found_files.extend(matches)
 
-        # Also search in common subdirectories
         for subdir in ['.agent', '.github', '.cursor']:
             subdir_path = target_path / subdir
             if subdir_path.exists():
                 matches = list(subdir_path.glob(pattern))
                 found_files.extend(matches)
 
-    # Remove duplicates
     found_files = list(set(found_files))
 
     if not found_files:
@@ -186,12 +293,11 @@ def clean(dry_run, target_dir):
 
         print(f"[+] Deleted {deleted}/{len(found_files)} file(s)")
 
-        # Re-scan to catch any files created between find and delete
         remaining = [f for f in found_files if f.exists()]
         if remaining:
             print(f"[!] {len(remaining)} file(s) still present (may have been recreated)")
-            for f in remaining:
-                print(f"    {f.relative_to(target_path)}")
+            for file_path in remaining:
+                print(f"    {file_path.relative_to(target_path)}")
 
 
 if __name__ == '__main__':
